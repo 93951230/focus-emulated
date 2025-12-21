@@ -1,1 +1,0 @@
-ALLEGRO_KEY_TAB:
