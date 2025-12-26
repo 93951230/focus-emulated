@@ -84,6 +84,29 @@ which represents this level:
 
 And take 
 
+```
+scale 2
+tilemap
+14 10
+11111111111111
+10000000010001
+10000000010001
+10000000010001
+10p00000010001
+10G00000010001
+10100000010701
+10000000010001
+1aaaaaaaa1aaa1
+11111111111111
+focus 3
+focus_rate_dec 2
+focus_rate_inc 1
+```
+
+which represents this level: 
+
+![alt text](image-4.png)
+
 `scale` means how large the tilemap should be placed, as compared to the case `scale = 1`
 
 `tilemap` decides the shape, where
