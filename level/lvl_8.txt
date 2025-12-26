@@ -1,8 +1,6 @@
+scale 3
+tilemap
 9 9
-2
-0 0
-3
-0
 aaaaaaaaa
 111111111
 100010001
@@ -12,3 +10,6 @@ aaaaaaaaa
 1110p0111
 111a01111
 111121111
+focus 2
+focus_rate_dec 0
+focus_rate_inc 0

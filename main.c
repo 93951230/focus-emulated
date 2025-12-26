@@ -12,8 +12,6 @@
 #include <allegro5/allegro_image.h>
 #include <allegro5/allegro_ttf.h>
 
-#define true 1
-#define false 0
 #define KEY_SEEN 1
 #define KEY_DOWN 2
 #define MAX_MAP_W 500
@@ -28,7 +26,7 @@
 #define FOCUS_MOVE_SPEED 150 // unit is pixel per second
 #define MIN_PERC_FOCUS_REQ 0.3f
 #define TELE_MOMENTUM 4
-#define MAX_LEVEL 100
+#define MAX_LEVEL 114
 #define MAX_TARGET_CNT 5000
 #define MAX_ANIM 50
 
@@ -48,12 +46,12 @@ int title_font_height;
 ALLEGRO_FONT* title_font = NULL;
 
 unsigned char key[ALLEGRO_KEY_MAX];
-float gravity_pull = 60*TILE_SIZE;
-float drag_coefficient_y = 0.005f; // linear drag
-float drag_coefficient_x = 0.05f;
+double gravity_pull = 60*TILE_SIZE;
+double drag_coefficient_y = 0.005f; // linear drag
+double drag_coefficient_x = 0.05f;
 bool has_gravity = true;
-float player_walk_speed = 7*TILE_SIZE;
-float player_jump_force = 40*TILE_SIZE;
+double player_walk_speed = 7*TILE_SIZE;
+double player_jump_force = 40*TILE_SIZE;
 int curr_level = 0;
 bool show_tutorial = false;
 char tutorial_text[100];
@@ -125,21 +123,21 @@ int between(int lo, int hi) {
     return lo + (rand() % (hi - lo));
 }
 
-float between_f(float lo, float hi) {
-    return lo + ((float)rand() / (float)RAND_MAX) * (hi - lo);
+double between_f(double lo, double hi) {
+    return lo + ((double)rand() / (double)RAND_MAX) * (hi - lo);
 }
 
 void al_draw_circle_dashed(
-    float cx, float cy, float r, ALLEGRO_COLOR color,
-    float thickness, float l_fill, float l_vacant, float offset
+    double cx, double cy, double r, ALLEGRO_COLOR color,
+    double thickness, double l_fill, double l_vacant, double offset
 ) {
-    float l_total = l_fill + l_vacant;
-    for (float angle = 0; angle < 2 * M_PI; angle += l_total) {
+    double l_total = l_fill + l_vacant;
+    for (double angle = 0; angle < 2 * M_PI; angle += l_total) {
         al_draw_arc(cx, cy, r, angle + offset, l_fill, color, thickness);
     }
 }
 
-float positive_mod(float x, float y) {
+double positive_mod(double x, double y) {
     return fmod(fmod(x, y) + y, y);
 }
 
@@ -148,68 +146,59 @@ float positive_mod(float x, float y) {
 // ---vector---
     #pragma region
 typedef struct {
-    float x;
-    float y;
-} Vector;
+    double x;
+    double y;
+} Vec2;
 
-static inline Vector vec_new(float x, float y) {
-    Vector v;
+static inline Vec2 vec_new(double x, double y) {
+    Vec2 v;
     v.x = x;
     v.y = y;
     return v;
 }
 
-static inline Vector vec_add(Vector a, Vector b) {
+static inline Vec2 vec_add(Vec2 a, Vec2 b) {
     return vec_new(a.x + b.x, a.y + b.y);
 }
 
-static inline Vector vec_sub(Vector a, Vector b) {
+static inline Vec2 vec_sub(Vec2 a, Vec2 b) {
     return vec_new(a.x - b.x, a.y - b.y);
 }
 
-static inline Vector vec_mul(Vector v, float s) {
+static inline Vec2 vec_mul(Vec2 v, double s) {
     return vec_new(v.x * s, v.y * s);
 }
 
-static inline Vector vec_div(Vector v, float s) {
+static inline Vec2 vec_div(Vec2 v, double s) {
     return vec_new(v.x / s, v.y / s);
 }
 
-static inline float vec_dot(Vector a, Vector b) {
+static inline double vec_dot(Vec2 a, Vec2 b) {
     return a.x * b.x + a.y * b.y;
 }
 
-static inline float vec_len_sq(Vector v) {
+static inline double vec_len_sq(Vec2 v) {
     return v.x * v.x + v.y * v.y;
 }
 
-static inline float vec_len(Vector v) {
+static inline double vec_len(Vec2 v) {
     return sqrt(vec_len_sq(v));
 }
 
-static inline Vector vec_normalize(Vector v) {
-    float length = vec_len(v);
+static inline Vec2 vec_normalize(Vec2 v) {
+    double length = vec_len(v);
     if (length > 0.0) {
         return vec_div(v, length);
     }
     return vec_new(0.0, 0.0);
-}
-
-static inline Vector vec_rotate(Vector v, float radians) {
-    float c = cos(radians);
-    float s = sin(radians);
-    return vec_new(
-        v.x * c - v.y * s,
-        v.x * s + v.y * c
-    );
 }
 #pragma endregion
 
 // ---static rect---
     #pragma region
 typedef struct {
-    Vector pos;
-    Vector size;
+    Vec2 pos;
+    Vec2 size;
 } StaticRect; // used for tile
 
 #pragma endregion
@@ -217,14 +206,14 @@ typedef struct {
 // ---rect---
     #pragma region
 typedef struct {
-    Vector pos;
-    Vector size;
-    Vector velocity;
+    Vec2 pos;
+    Vec2 size;
+    Vec2 velocity;
 } Rect; // used for player, missilez
 
 #pragma endregion
 
-bool overlap(const Vector posA, const Vector sizeA, const Vector posB, const Vector sizeB) {
+bool overlap(const Vec2 posA, const Vec2 sizeA, const Vec2 posB, const Vec2 sizeB) {
     return !(posA.x + sizeA.x <= posB.x || 
              posB.x + sizeB.x <= posA.x || 
              posA.y + sizeA.y <= posB.y || 
@@ -237,22 +226,56 @@ bool overlap(const Vector posA, const Vector sizeA, const Vector posB, const Vec
 #pragma region
 
 typedef struct {
-    Vector* target_pos;
-    Vector player_pos;
-    float scale;
+    Vec2* target_pos;
+    Vec2 player_pos;
+    double scale;
     int width;
     int height;
     int target_cnt;
+    char name[100];
     char* data;
     char** map;
-    float focus;
-    float focus_rate_inc;
-    float focus_rate_dec;
+    double focus;
+    double focus_rate_inc;
+    double focus_rate_dec;
     bool can_tele_outside;
 } Level;
 
-void level_load(Level* lvl, char dire[500], bool tell_info) {
+void consume_eol(FILE* f) {
+    int c;
+    // eat until newline or EOF
+    while ((c = fgetc(f)) != '\n' && c != EOF) {}
+}
+
+
+size_t read_token(FILE* f, char* buf, size_t cap) {
+    if (cap == 0) return 0;
+
+    int c;
+
+    // Optional: skip leading spaces / newlines
+    do {
+        c = fgetc(f);
+        if (c == EOF) { buf[0] = '\0'; return 0; }
+    } while (c == ' ' || c == '\n' || c == '\r');
+
+    size_t n = 0;
+    while (c != EOF && c != ' ' && c != '\n' && c != '\r') {
+        if (n + 1 < cap) buf[n++] = (char)c;   // keep room for '\0'
+        // else: silently truncate; or handle as error if you prefer
+        c = fgetc(f);
+    }
+
+    buf[n] = '\0';
+    return n;
+}
+
+void level_load(Level* lvl, char dire[100], bool tell_info) {
     FILE* file = fopen(dire,"r");
+    strcpy(lvl->name,dire);
+
+    // default
+    lvl->scale = 1;
 
     if (!file) {
         fprintf(stderr, "[Error] Unable to open %s\n",dire);
@@ -260,84 +283,83 @@ void level_load(Level* lvl, char dire[500], bool tell_info) {
     }
 
     int w, h;
-    if (fscanf(file, "%d %d", &w, &h) != 2) {
-        fprintf(stderr, "[Error] Can't read dimensions.\n");
-        exit(1);
-    }
-    if (h <= 0 || w <= 0 || h > MAX_MAP_H || w > MAX_MAP_W) {
-        fprintf(stderr, "[Error] Invalid map dimensions: %d, %d\n", w, h);
-        exit(1);
-    }
-    lvl->width = w;
-    lvl->height = h;
-    if (fscanf(file,"%f",&lvl->focus) != 1) {
-        fprintf(stderr, "[Error] Can't read focus.\n");
-        exit(1);
-    }
-    if (fscanf(file,"%f %f",&lvl->focus_rate_dec,&lvl->focus_rate_inc) != 2) {
-        fprintf(stderr, "[Error] Can't read focus_rate_dec/focus_rate_inc\n");
-        exit(1);
-    }
-    if (lvl->focus < 0 || lvl->focus_rate_inc < 0 || lvl->focus_rate_dec < 0) {
-        fprintf(stderr, "[Error] Invalid focus setting: %f, %f\n", lvl->focus, lvl->focus_rate_inc);
-        exit(1);
-    }
-    if (fscanf(file,"%f",&lvl->scale) != 1) {
-        fprintf(stderr, "[Error] Can't read scale.\n");
-        exit(1);
-    }
-    if (lvl->scale <= 0) {
-        fprintf(stderr, "[Error] Invalid scale setting: %f\n", lvl->scale);
-        exit(1);
-    }
-    int temp = 0;
-    if (fscanf(file,"%d",&temp) != 1) {
-        fprintf(stderr, "[Error] Can't read scale.\n");
-        exit(1);
-    }
-    lvl->can_tele_outside = temp != 0;
-    fgetc(file);
-    
-    lvl->data = (char*)malloc(sizeof(char)*(w*h));
-    lvl->map = (char**)malloc(sizeof(char*)*h);
-    for (int i=0;i<h;i++) {
-        lvl->map[i] = &(lvl->data[i*w]);
-    }
+    char input_hint[500];
+    int input_hintn = 0;
+    while (input_hintn = read_token(file,input_hint,500)) {
+        if (strncmp(input_hint,"endl",4) == 0) break;
+        else if (strncmp(input_hint,"tilemap",input_hintn) == 0) {
+            if (fscanf(file, "%d %d", &w, &h) != 2) {
+                fprintf(stderr, "[Error] Can't read dimensions.\n");
+                exit(1);
+            }
+            lvl->width = w;
+            lvl->height = h;
 
-    char* buf = malloc((size_t)w + 4);  // +1 for newline, +1 for '\0'
-    if (!buf) {
-        perror("malloc");
-        free(lvl->map);
-        free(lvl->data);
-        fclose(file);
-        exit(1);
-    }
+            lvl->data = (char*)malloc(sizeof(char)*(w*h));
+            lvl->map = (char**)malloc(sizeof(char*)*h);
+            for (int i=0;i<h;i++) {
+                lvl->map[i] = &(lvl->data[i*w]);
+            }
 
-    for (int i = 0; i < h; i++) {
-        if (!fgets(buf, w + 4, file)) {
-            fprintf(stderr, "[Error] Can't read map row %d (expected %d chars).\n", i, w);
+            char* buf = malloc((size_t)w + 4);
+
+            for (int i = 0; i < h; i++) {
+                if (fscanf(file,"%s",buf) != 1) {
+                    fprintf(stderr, "[Error] Can't read map row %d (expected %d chars).\n", i, w);
+                    free(buf);
+                    exit(1);
+                }
+                size_t len = strcspn(buf, "\r\n");
+                if (len < (size_t)w) {
+                    fprintf(stderr, "[Error] Row %d is too short (%zu < %d).\n", i, len, w);
+                    free(buf);
+                    exit(1);
+                }
+                memcpy(lvl->map[i], buf, w);
+            }
             free(buf);
-            exit(1);
+
+            consume_eol(file);
         }
-        size_t len = strcspn(buf, "\r\n");  // actual data length before newline
-        if (len < (size_t)w) {
-            fprintf(stderr, "[Error] Row %d is too short (%zu < %d).\n", i, len, w);
-            free(buf);
-            exit(1);
+        else if (strncmp(input_hint,"focus",input_hintn) == 0) {
+            if (fscanf(file,"%lf",&lvl->focus) != 1) {
+                fprintf(stderr, "[Error] Can't read focus.\n");
+                exit(1);
+            }
         }
-        /* copy exactly w characters */
-        memcpy(lvl->map[i], buf, (size_t)w);
+        else if (strncmp(input_hint,"focus_rate_dec",input_hintn) == 0) {
+            if (fscanf(file,"%lf",&lvl->focus_rate_dec) != 1) {
+                fprintf(stderr, "[Error] Can't read focus_rate_dec\n");
+                exit(1);
+            }
+        }
+        else if (strncmp(input_hint,"focus_rate_inc",input_hintn) == 0) {
+            if (fscanf(file,"%lf",&lvl->focus_rate_inc) != 1) {
+                fprintf(stderr, "[Error] Can't read focus_rate_inc\n");
+                exit(1);
+            }
+        }
+        else if (strncmp(input_hint,"scale",input_hintn) == 0) {
+            if (fscanf(file,"%lf",&lvl->scale) != 1) {
+                fprintf(stderr, "[Error] Can't read scale.\n");
+                exit(1);
+            }
+        }
+        else if (strncmp(input_hint,"can_tele_outside",input_hintn) == 0) {
+            lvl->can_tele_outside = true;
+        }
+        else fprintf(stderr, "[Error] Unknown input format : %s\n",input_hint);
     }
-    free(buf);
+    fclose(file);
 
     lvl->player_pos.x = -1;
     lvl->player_pos.y = -1;
     lvl->target_cnt = 0;
-    lvl->target_pos = (Vector*)malloc(sizeof(Vector)*MAX_TARGET_CNT);
+    lvl->target_pos = (Vec2*)malloc(sizeof(Vec2)*MAX_TARGET_CNT);
     for (int i=0;i<h;i++) {
         for (int j=0;j<w;j++) {
             if (lvl->map[i][j] == 'p') {
-                Vector pos = {j,i};
+                Vec2 pos = {j,i};
                 lvl->player_pos = pos;
                 break;
             }
@@ -348,19 +370,17 @@ void level_load(Level* lvl, char dire[500], bool tell_info) {
     }
     if (lvl->player_pos.x == -1 || lvl->player_pos.y == -1) {
         if (tell_info) printf("Can't find initial player position (character p), set it to the mid.\n");
-        Vector pos = {lvl->width/2,lvl->height/2};
+        Vec2 pos = {lvl->width/2,lvl->height/2};
         lvl->player_pos = pos;
     }
-    
-    fclose(file);
 
     if (tell_info) {
         printf("================================================\n");
         printf("Successfully loaded %s, the info being\n",dire);
         printf("width = %d, height = %d\n",lvl->width,lvl->height);
-        printf("focus = %f\n",lvl->focus);
-        printf("focus inc = %f, focus dec = %f\n",lvl->focus_rate_inc, lvl->focus_rate_dec);
-        printf("player position = (%f,%f)\n",lvl->player_pos.x,lvl->player_pos.y);
+        printf("focus = %lf\n",lvl->focus);
+        printf("focus inc = %lf, focus dec = %lf\n",lvl->focus_rate_inc, lvl->focus_rate_dec);
+        printf("player position = (%lf,%lf)\n",lvl->player_pos.x,lvl->player_pos.y);
         for (int i=0;i<lvl->height;i++) {
             for (int j=0;j<lvl->width;j++) {
                 printf("%c",lvl->map[i][j]);
@@ -377,13 +397,13 @@ void level_free(Level* lvl) {
     free(lvl->data);
 }
 
-void level_draw(Level* lvl,Vector deviation,float now) {
+void level_draw(Level* lvl,Vec2 deviation,double now) {
     for (int i=0;i<lvl->height;i++) {
         for (int j=0;j<lvl->width;j++) {
-            float x = j*TILE_SIZE*lvl->scale + deviation.x;
-            float y = i*TILE_SIZE*lvl->scale + deviation.y;
-            float wid = TILE_SIZE*lvl->scale;
-            float hei = TILE_SIZE*lvl->scale;
+            double x = j*TILE_SIZE*lvl->scale + deviation.x;
+            double y = i*TILE_SIZE*lvl->scale + deviation.y;
+            double wid = TILE_SIZE*lvl->scale;
+            double hei = TILE_SIZE*lvl->scale;
 
             switch (lvl->map[i][j]) {
                 case '0':
@@ -448,23 +468,23 @@ void level_draw(Level* lvl,Vector deviation,float now) {
         bool left_target = (i < 0 || lvl->map[i][j-1] == '7'); // is left neighbor a target?
         bool up_target = (i < 0 || lvl->map[i-1][j] == '7'); // same
 
-        float diff = 5;
-        float ano_x = (j*TILE_SIZE-(left_target?0:diff))*lvl->scale + deviation.x;
-        float ano_y = (i*TILE_SIZE-(up_target?0:diff))*lvl->scale + deviation.y;
-        float ano_wid = (TILE_SIZE+(left_target?diff:2*diff))*lvl->scale;
-        float ano_hei = (TILE_SIZE+(up_target?diff:2*diff))*lvl->scale;
+        double diff = 5;
+        double ano_x = (j*TILE_SIZE-(left_target?0:diff))*lvl->scale + deviation.x;
+        double ano_y = (i*TILE_SIZE-(up_target?0:diff))*lvl->scale + deviation.y;
+        double ano_wid = (TILE_SIZE+(left_target?diff:2*diff))*lvl->scale;
+        double ano_hei = (TILE_SIZE+(up_target?diff:2*diff))*lvl->scale;
         al_draw_filled_rectangle(ano_x,ano_y,ano_x+ano_wid,ano_y+ano_hei,al_map_rgba(207, 167, 73,100)); // rgb(207, 167, 73)
         
-        float x = j*TILE_SIZE*lvl->scale + deviation.x;
-        float y = i*TILE_SIZE*lvl->scale + deviation.y;
-        float wid = TILE_SIZE*lvl->scale;
-        float hei = TILE_SIZE*lvl->scale;
+        double x = j*TILE_SIZE*lvl->scale + deviation.x;
+        double y = i*TILE_SIZE*lvl->scale + deviation.y;
+        double wid = TILE_SIZE*lvl->scale;
+        double hei = TILE_SIZE*lvl->scale;
         al_draw_scaled_bitmap(target_block_on,0,0,16,16,x,y,wid,hei,0);
     }
 }
 
-Vector calculate_deviation(Level* lvl) {
-    Vector ans;
+Vec2 calculate_deviation(Level* lvl) {
+    Vec2 ans;
     ans.x = (WINDOW_W-(lvl->scale*lvl->width*TILE_SIZE))/2;
     ans.y = (WINDOW_H-(lvl->scale*lvl->height*TILE_SIZE))/2;
     return ans;
@@ -540,16 +560,16 @@ typedef enum { // for animation
 } PlayerStatus;
 
 typedef struct {
-    Vector focus_target;
-    Vector crystal_provider;
-    Vector standing_on;
+    Vec2 focus_target;
+    Vec2 crystal_provider;
+    Vec2 standing_on;
     PlayerStatus status;
     Rect rect;
     int walk_dir;
     int target_hit;
-    float focus;
-    float walk_speed;
-    float coyote_timer;
+    double focus;
+    double walk_speed;
+    double coyote_timer;
     bool grounded;
     bool focusing;
     bool can_refocus;
@@ -578,12 +598,12 @@ Player player_new(Level* lvl) {
     return player;
 }
 
-DIRE player_resolve_collision(Player* player, Vector pos, Vector size) {
-    Vector delta = {
+DIRE player_resolve_collision(Player* player, Vec2 pos, Vec2 size) {
+    Vec2 delta = {
         (player->rect.pos.x + PLAYER_SIZE / 2) - (pos.x + size.x / 2),
         (player->rect.pos.y + PLAYER_SIZE / 2) - (pos.y + size.y / 2)
     };
-    Vector overlap_part = {
+    Vec2 overlap_part = {
         (PLAYER_SIZE / 2 + size.x / 2) - fabs(delta.x),
         (PLAYER_SIZE / 2 + size.y / 2) - fabs(delta.y)
     };
@@ -620,8 +640,8 @@ DIRE player_resolve_collision(Player* player, Vector pos, Vector size) {
     return direction;
 }
 
-void player_check_and_resolve_collision(Player* player, Level* lvl, Vector deviation ,float delta_time) {
-    float x = player->rect.pos.x, y = player->rect.pos.y;
+void player_check_and_resolve_collision(Player* player, Level* lvl, Vec2 deviation ,double delta_time) {
+    double x = player->rect.pos.x, y = player->rect.pos.y;
     int min_tx = floor(x / TILE_SIZE);
     int max_tx = floor((x + PLAYER_SIZE - 1) / TILE_SIZE);
     int min_ty = floor(y / TILE_SIZE);
@@ -631,8 +651,8 @@ void player_check_and_resolve_collision(Player* player, Level* lvl, Vector devia
         for (int j = max(0, min_tx); j <= min(lvl->width - 1, max_tx); j++) {
             if (!is_collidable(lvl->map[i][j])) continue;
 
-            float tx = j * TILE_SIZE;
-            float ty = i * TILE_SIZE;
+            double tx = j * TILE_SIZE;
+            double ty = i * TILE_SIZE;
             Rect tile = {
                 .pos = {tx, ty},
                 .size = {TILE_SIZE, TILE_SIZE}
@@ -645,10 +665,10 @@ void player_check_and_resolve_collision(Player* player, Level* lvl, Vector devia
             }
 
             if (debug) {
-            float draw_x = j * TILE_SIZE * lvl->scale + deviation.x;
-            float draw_y = i * TILE_SIZE * lvl->scale + deviation.y;
-            float draw_w = TILE_SIZE * lvl->scale;
-            float draw_h = TILE_SIZE * lvl->scale;
+            double draw_x = j * TILE_SIZE * lvl->scale + deviation.x;
+            double draw_y = i * TILE_SIZE * lvl->scale + deviation.y;
+            double draw_w = TILE_SIZE * lvl->scale;
+            double draw_h = TILE_SIZE * lvl->scale;
             al_draw_rectangle(draw_x, draw_y, draw_x + draw_w, draw_y + draw_h, al_map_rgb(255, 0, 0), lvl->scale);
             }
         }
@@ -656,7 +676,7 @@ void player_check_and_resolve_collision(Player* player, Level* lvl, Vector devia
 }
 
 char player_block_underneath(Player* player, Level* lvl) {
-    float probeY = player->rect.pos.y + PLAYER_SIZE + FTHRES;
+    double probeY = player->rect.pos.y + PLAYER_SIZE + FTHRES;
     int ty = floor(probeY / TILE_SIZE);
 
     int tx0 = floor(player->rect.pos.x / TILE_SIZE);
@@ -675,9 +695,9 @@ char player_block_underneath(Player* player, Level* lvl) {
     return '0';
 }
 
-Vector player_initial_pos(Player* player); // forward
+Vec2 player_initial_pos(Player* player); // forward
 
-bool player_has_crystal_nearby(Player* player, Level* lvl, Vector deviation) {
+bool player_has_crystal_nearby(Player* player, Level* lvl, Vec2 deviation) {
     int lower_x = max(floor(player->rect.pos.x-player->focus*TILE_SIZE)/TILE_SIZE,0);
     int upper_x = min(floor(player->rect.pos.x+player->focus*TILE_SIZE)/TILE_SIZE,lvl->width-1);
     int lower_y = max(floor(player->rect.pos.y-player->focus*TILE_SIZE)/TILE_SIZE,0);
@@ -685,7 +705,7 @@ bool player_has_crystal_nearby(Player* player, Level* lvl, Vector deviation) {
 
     for (int i=lower_y;i<=upper_y;i++) {
         for (int j=lower_x;j<=upper_x;j++) {
-            Vector dif = vec_sub(vec_mul(vec_new(j + 0.5f,i + 0.5f),TILE_SIZE),player_initial_pos(player));
+            Vec2 dif = vec_sub(vec_mul(vec_new(j + 0.5f,i + 0.5f),TILE_SIZE),player_initial_pos(player));
             if (vec_len_sq(dif) > player->focus*player->focus*TILE_SIZE*TILE_SIZE) continue;
             if (lvl->map[i][j] == '9') {// is crystal
                 player->crystal_provider = vec_new(j,i);
@@ -693,10 +713,10 @@ bool player_has_crystal_nearby(Player* player, Level* lvl, Vector deviation) {
             }
             
             if (debug) {
-                float draw_x = TILE_SIZE*lvl->scale*j + deviation.x;
-                float draw_y = TILE_SIZE*lvl->scale*i + deviation.y;
-                float draw_wid = TILE_SIZE*lvl->scale;
-                float draw_hei = TILE_SIZE*lvl->scale;
+                double draw_x = TILE_SIZE*lvl->scale*j + deviation.x;
+                double draw_y = TILE_SIZE*lvl->scale*i + deviation.y;
+                double draw_wid = TILE_SIZE*lvl->scale;
+                double draw_hei = TILE_SIZE*lvl->scale;
                 al_draw_rectangle(draw_x,draw_y,draw_x+draw_wid,draw_y+draw_hei,al_map_rgb(255, 0, 0),lvl->scale);
             }
         }
@@ -721,7 +741,7 @@ void player_kill(Player *player, Level *lvl) {
     death_cnt++;
 }
 
-void player_update(Player* player, Level* lvl, Vector deviation,float delta_time) {
+void player_update(Player* player, Level* lvl, Vec2 deviation,double delta_time) {
     // # detect target hit
     if (player->under == '7') {
         player->target_hit++;
@@ -776,11 +796,11 @@ void player_update(Player* player, Level* lvl, Vector deviation,float delta_time
         player->coyote_timer -= delta_time;  // delta_time = time since last frame
     }
     // # clip player back
-    float margin = 3;
-    float draw_x = lvl->scale*player->rect.pos.x + deviation.x;
-    float draw_y = lvl->scale*player->rect.pos.y + deviation.y;
-    float draw_wid = PLAYER_SIZE*lvl->scale;
-    float draw_hei = PLAYER_SIZE*lvl->scale;
+    double margin = 3;
+    double draw_x = lvl->scale*player->rect.pos.x + deviation.x;
+    double draw_y = lvl->scale*player->rect.pos.y + deviation.y;
+    double draw_wid = PLAYER_SIZE*lvl->scale;
+    double draw_hei = PLAYER_SIZE*lvl->scale;
     if (draw_x < -margin*draw_wid) {
         player->rect.pos.x = (WINDOW_W-deviation.x)/lvl->scale;
     }
@@ -795,10 +815,10 @@ void player_update(Player* player, Level* lvl, Vector deviation,float delta_time
     }
     // # move
     if (player->focusing) delta_time *= 0.1;
-    Vector v = player->rect.velocity;
-    float speed_sq = vec_dot(v, v);
-    Vector inv = vec_mul(vec_normalize(v),-1);
-    Vector drag = {
+    Vec2 v = player->rect.velocity;
+    double speed_sq = vec_dot(v, v);
+    Vec2 inv = vec_mul(vec_normalize(v),-1);
+    Vec2 drag = {
         inv.x * drag_coefficient_x * speed_sq,
         inv.y * drag_coefficient_y * speed_sq
     };
@@ -861,8 +881,8 @@ void player_update(Player* player, Level* lvl, Vector deviation,float delta_time
     }
 
     const int STEPS = 30;
-    Vector stepX = vec_new(delta_time * player->rect.velocity.x / STEPS, 0);
-    Vector stepY = vec_new(0, delta_time * player->rect.velocity.y / STEPS);
+    Vec2 stepX = vec_new(delta_time * player->rect.velocity.x / STEPS, 0);
+    Vec2 stepY = vec_new(0, delta_time * player->rect.velocity.y / STEPS);
 
 
     // # slide
@@ -886,29 +906,29 @@ void player_update(Player* player, Level* lvl, Vector deviation,float delta_time
     player->grounded = player->under != '0';
 }
 
-Vector player_initial_pos(Player* player) {
+Vec2 player_initial_pos(Player* player) {
     return vec_new(player->rect.pos.x + PLAYER_SIZE/2, player->rect.pos.y + PLAYER_SIZE/2);
 }
 
-float player_calculate_focus_decay(Player* player, Level* lvl) {
-    float ans = player->focus;
+double player_calculate_focus_decay(Player* player, Level* lvl) {
+    double ans = player->focus;
     // initial cut
     ans -= lvl->focus*MIN_PERC_FOCUS_REQ;
 
     // linear drop according how much you use
-    Vector orig = player_initial_pos(player);
-    Vector dif = vec_sub(player->focus_target,orig);
-    float exhaust_ratio = vec_len(dif)/player->focus/TILE_SIZE;
+    Vec2 orig = player_initial_pos(player);
+    Vec2 dif = vec_sub(player->focus_target,orig);
+    double exhaust_ratio = vec_len(dif)/player->focus/TILE_SIZE;
     ans *= (1+MIN_PERC_FOCUS_REQ-exhaust_ratio);
 
     return ans;
 }
 
 void player_cap_focus_target(Player* player) {
-    float r = TILE_SIZE * player->focus;
-    Vector orig = player_initial_pos(player);
-    Vector dif = vec_sub(player->focus_target,orig);
-    float len = vec_len_sq(dif);
+    double r = TILE_SIZE * player->focus;
+    Vec2 orig = player_initial_pos(player);
+    Vec2 dif = vec_sub(player->focus_target,orig);
+    double len = vec_len_sq(dif);
     if (len <= r*r) return;
     
     player->focus_target = vec_add(orig,vec_mul(vec_normalize(dif),r));
@@ -925,22 +945,22 @@ bool player_can_teleport(Player* player, Level* lvl) {
     return lvl->can_tele_outside;
 }
 
-void player_draw(Player* player,Level* lvl,Vector deviation,float now) {
-    float x = lvl->scale*player->rect.pos.x + deviation.x;
-    float y = lvl->scale*player->rect.pos.y + deviation.y;
-    float wid = PLAYER_SIZE*lvl->scale;
-    float hei = PLAYER_SIZE*lvl->scale;
+void player_draw(Player* player,Level* lvl,Vec2 deviation,double now) {
+    double x = lvl->scale*player->rect.pos.x + deviation.x;
+    double y = lvl->scale*player->rect.pos.y + deviation.y;
+    double wid = PLAYER_SIZE*lvl->scale;
+    double hei = PLAYER_SIZE*lvl->scale;
 
-    float circ_x = x+lvl->scale*PLAYER_SIZE/2;
-    float circ_y = y+lvl->scale*PLAYER_SIZE/2;
-    float r = player->focus*lvl->scale*TILE_SIZE;
-    float circ_line_width = 5;
+    double circ_x = x+lvl->scale*PLAYER_SIZE/2;
+    double circ_y = y+lvl->scale*PLAYER_SIZE/2;
+    double r = player->focus*lvl->scale*TILE_SIZE;
+    double circ_line_width = 5;
 
     al_draw_scaled_bitmap(player_idle_0,0,0,1200,1200,x,y,wid,hei,0);
 
     if (lvl->focus == 0.f) return;
 
-    float offset = 0.8*fmod(al_get_time(), 2 * M_PI);
+    double offset = 0.8*fmod(al_get_time(), 2 * M_PI);
     if (player->focusing) {
         offset *= 2;
     }
@@ -972,11 +992,11 @@ void player_draw(Player* player,Level* lvl,Vector deviation,float now) {
     if (player->focusing) {
         // draw target
         player_cap_focus_target(player);
-        float draw_t_x = lvl->scale*player->focus_target.x + deviation.x;
-        float draw_t_y = lvl->scale*player->focus_target.y + deviation.y;
+        double draw_t_x = lvl->scale*player->focus_target.x + deviation.x;
+        double draw_t_y = lvl->scale*player->focus_target.y + deviation.y;
         al_draw_circle(draw_t_x,draw_t_y,10,focus_color,circ_line_width);
-        float gap = 10;
-        float len = 20;
+        double gap = 10;
+        double len = 20;
         ALLEGRO_COLOR cross_color = al_map_rgba(20,100,240,220);
         al_draw_line(draw_t_x, draw_t_y - gap, draw_t_x, draw_t_y - gap - len, cross_color, circ_line_width);
         al_draw_line(draw_t_x, draw_t_y + gap, draw_t_x, draw_t_y + gap + len, cross_color, circ_line_width);
@@ -1002,7 +1022,7 @@ void player_draw(Player* player,Level* lvl,Vector deviation,float now) {
             }
         }
 
-        float decay_r = player_calculate_focus_decay(player,lvl) * TILE_SIZE * lvl->scale;
+        double decay_r = player_calculate_focus_decay(player,lvl) * TILE_SIZE * lvl->scale;
         al_draw_circle(draw_t_x,draw_t_y,decay_r,esti_color,circ_line_width);
     }
 
@@ -1023,7 +1043,7 @@ void player_draw(Player* player,Level* lvl,Vector deviation,float now) {
 
 void player_attempt_teleport(Player* player,Level* lvl) {
     if (!player_can_teleport(player,lvl)) return;
-    Vector orig = player_initial_pos(player);
+    Vec2 orig = player_initial_pos(player);
     player->focus = player_calculate_focus_decay(player,lvl);
     player->rect.pos = vec_sub(player->focus_target,vec_new(PLAYER_SIZE/2,PLAYER_SIZE/2));
 
@@ -1031,7 +1051,7 @@ void player_attempt_teleport(Player* player,Level* lvl) {
     if (play_audio) al_play_sample(teleport_pew, 2.0, 0.0, 0.5, ALLEGRO_PLAYMODE_ONCE, 0);
 
     // add momentum
-    Vector dif = vec_sub(player->focus_target,orig);
+    Vec2 dif = vec_sub(player->focus_target,orig);
     player->rect.velocity = vec_add(player->rect.velocity,vec_mul(vec_normalize(dif),TELE_MOMENTUM*vec_len(dif)));
 }
 
@@ -1052,16 +1072,16 @@ typedef enum {
     PASSED
 } GameState;
 
-void draw_info(Player* player,Level* lvl, bool light_mode) {
-    float x = player->rect.pos.x, y = player->rect.pos.y;
+void draw_info(Player* player,Level* lvl, bool light_mode,Level levels[MAX_LEVEL]) {
+    double x = player->rect.pos.x, y = player->rect.pos.y;
     ALLEGRO_COLOR color = al_map_rgb(0, 0, 0);
     if (!light_mode) color = al_map_rgb(210,210,210);
     int lines = 0;
 
     if (debug) {
-        al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Position: %f %f",x,y);
+        al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Position: %lf %lf",x,y);
         lines++;
-        al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Velocity: %f %f",player->rect.velocity.x,player->rect.velocity.y);
+        al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Velocity: %lf %lf",player->rect.velocity.x,player->rect.velocity.y);
         lines++;
         al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "walk_dir: %d",player->walk_dir);
         lines++;
@@ -1070,19 +1090,19 @@ void draw_info(Player* player,Level* lvl, bool light_mode) {
         al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Type: %c",player->under);
         lines++;
     }
-    al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Focus: %f, Rate: %f",player->focus, lvl->focus_rate_inc);
+    al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Focus: %lf, Rate: %lf",player->focus, lvl->focus_rate_inc);
     lines++;
     al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Audio: %s",play_audio?"ON":"OFF");
     lines++;
     al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Deaths: %i",death_cnt);
     
-    al_draw_textf(info_font, color, 10, WINDOW_H-10-info_font_height*2, 0, "Playing level %i",curr_level);
+    al_draw_textf(info_font, color, 10, WINDOW_H-10-info_font_height*2, 0, "Playing %s",levels[curr_level].name);
 
     // write tutorial
     if (show_tutorial) {
-        float box_w = WINDOW_W, box_h = 60;
-        float box_x = (WINDOW_W - box_w) / 2;
-        float box_y = WINDOW_H - box_h - 40;
+        double box_w = WINDOW_W, box_h = 60;
+        double box_x = (WINDOW_W - box_w) / 2;
+        double box_y = WINDOW_H - box_h - 40;
         al_draw_filled_rectangle(box_x, box_y, box_x + box_w, box_y + box_h, al_map_rgba(0,0,0,180));
         al_draw_text(info_font, al_map_rgb(255,255,255), WINDOW_W/2, box_y + 15, ALLEGRO_ALIGN_CENTRE, tutorial_text);
     }
@@ -1152,7 +1172,7 @@ void draw_title_screen(int selected_option,bool light_mode) {
 
     int base_x = 120, base_y = 310;
     for (int i=0;i<option_count;i++) {
-        float curr_y = base_y+title_font_height*i;
+        double curr_y = base_y+title_font_height*i;
         if (i == selected_option) {
             al_draw_text(large_info_font, color,base_x,curr_y,0,title_screen_options[i]);
             al_draw_scaled_bitmap(player_idle_0,0,0,1200,1200,base_x-2*PLAYER_SIZE,curr_y+PLAYER_SIZE/2,PLAYER_SIZE,PLAYER_SIZE,0);
@@ -1169,7 +1189,7 @@ void draw_title_screen(int selected_option,bool light_mode) {
     "then use [A] to proceed.");
 }
 
-void play_level(Level* level, GameState* state, Player* player,Vector* deviation) {
+void play_level(Level* level, GameState* state, Player* player,Vec2* deviation) {
     *state = IN_GAME;
     *player = player_new(level);
     *deviation = calculate_deviation(level);
@@ -1180,7 +1200,7 @@ void play_level(Level* level, GameState* state, Player* player,Vector* deviation
     }
 }   
 
-void proceed_as_selected(int selected_option,GameState* state,Level levels[MAX_LEVEL],Player* player,Vector* deviation) {
+void proceed_as_selected(int selected_option,GameState* state,Level levels[MAX_LEVEL],Player* player,Vec2* deviation) {
     switch (selected_option) {
         case 0:
             play_level(&levels[curr_level],state,player,deviation);
@@ -1279,74 +1299,11 @@ void deinit_audio() {
 // ===animation handler===
 #pragma region
 
-// ---anim struct---
-
-typedef enum {
-    ANIM_LINEAR,
-    ANIM_SINE,
-    ANIM_EXPONENTIAL
-} AnimStyle;
-
-typedef struct { // describes way to change a value
-    Vector endpoints;
-    AnimStyle anim_style;
-    float t0;
-    float t1;
-    float t;
-
-} Anim;
-
-Anim new_anim(Vector endpoints, AnimStyle anim_style,float t0, float t1) {
-    Anim ans;
-    ans.endpoints = endpoints;
-    ans.anim_style = anim_style;
-    ans.t0 = t0;
-    ans.t1 = t1;
-    return ans;
-}
-
-float anim_eval(Anim* anim,float curr_time) {
-    float x = anim->endpoints.x, y = anim->endpoints.y;
-    float t = anim->t, t0 = anim->t0, t1 = anim->t1;
-    float nt = (t-t0)/(t1-t0);
-    float ease = 0;
-    switch (anim->anim_style) {
-        case ANIM_LINEAR:
-            ease = nt;
-            break;
-        case ANIM_SINE:
-            ease = sinf(nt * (M_PI / 2)); // fade out
-            break;
-        case ANIM_EXPONENTIAL:
-            ease = nt == 0 ? 0 : powf(2, 10 * (nt - 1)); // fade in
-            break;
-        default:
-            ease = nt; 
-            break;
-    }
-
-    return anim->endpoints.x*(1-ease) + anim->endpoints.y*ease;
-}
-
-
-// ---some anim setting---
-
-void animplay_death(Player* player) {
-    
-}
-
-void animplay_changescene() {
-
-}
-
 #pragma endregion
 
 // ===main===
 #pragma region
 int main() {
-    // ---init---
-    #pragma region
-
     // --allegro engine-- (don't touch)
     #pragma region
     must_init(al_init(), "allegro");
@@ -1402,7 +1359,7 @@ int main() {
     int total_level = 0;
     sequential_level_load(levels,&total_level);
     // load levels up
-    Vector deviation = calculate_deviation(&levels[curr_level]);
+    Vec2 deviation = calculate_deviation(&levels[curr_level]);
     Player player = player_new(&levels[curr_level]);
 
     #pragma endregion
@@ -1413,9 +1370,9 @@ int main() {
     bool light_mode = true;
     bool done = false;
     bool redraw = true;
-    float last_time = al_get_time();
-    float now = al_get_time();
-    float delta_time = 0;
+    double last_time = al_get_time();
+    double now = al_get_time();
+    double delta_time = 0;
     int selected_option = 0;
     option_count = sizeof(title_screen_options)/sizeof(title_screen_options[0]);
     while(true) {
@@ -1516,7 +1473,6 @@ int main() {
                         debug = !debug;
                         break;
                     case ALLEGRO_KEY_T:
-                        animplay_death(&player);
                         break;
                     case ALLEGRO_KEY_M:
                         play_audio = !play_audio;
@@ -1569,7 +1525,7 @@ int main() {
                     level_draw(&levels[curr_level],deviation,now);
                     player_draw(&player,&levels[curr_level],deviation,now);
                     player_update(&player,&levels[curr_level],deviation,delta_time);
-                    draw_info(&player,&levels[curr_level],light_mode);
+                    draw_info(&player,&levels[curr_level],light_mode,levels);
                     break;
                 case (LEVEL_SELECTION):
                     break;
@@ -1599,5 +1555,8 @@ int main() {
         level_free(&levels[i]);
     }
     #pragma endregion
+
+    return 0;
 }
+
 #pragma endregion
