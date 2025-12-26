@@ -20,12 +20,12 @@
 #define MAX_MAP_H 500
 #define WINDOW_W 1600
 #define WINDOW_H 1200
-#define FPS 30
+#define FPS 60
 #define TILE_SIZE 32
 #define PLAYER_SIZE 20
 #define FTHRES 0.01f
 #define COYOTE_TIME 0.1f
-#define FOCUS_MOVE_SPEED 5
+#define FOCUS_MOVE_SPEED 150 // unit is pixel per second
 #define MIN_PERC_FOCUS_REQ 0.3f
 #define TELE_MOMENTUM 4
 #define MAX_LEVEL 100
@@ -1092,18 +1092,18 @@ void ingame_input_handle(Player* player) {
     if (player->focusing) {
         if (key[ALLEGRO_KEY_LEFT] || key[ALLEGRO_KEY_RIGHT]) {
             if (!key[ALLEGRO_KEY_LEFT] && key[ALLEGRO_KEY_RIGHT]) {
-                player->focus_target.x += FOCUS_MOVE_SPEED;
+                player->focus_target.x += FOCUS_MOVE_SPEED/FPS;
             }
             else if (key[ALLEGRO_KEY_LEFT] && !key[ALLEGRO_KEY_RIGHT]) {
-                player->focus_target.x -= FOCUS_MOVE_SPEED;
+                player->focus_target.x -= FOCUS_MOVE_SPEED/FPS;
             }
         }
         if (key[ALLEGRO_KEY_UP] || key[ALLEGRO_KEY_DOWN]) {
             if (key[ALLEGRO_KEY_UP] && !key[ALLEGRO_KEY_DOWN]) {
-                player->focus_target.y -= FOCUS_MOVE_SPEED;
+                player->focus_target.y -= FOCUS_MOVE_SPEED/FPS;
             }
             else if (!key[ALLEGRO_KEY_UP] && key[ALLEGRO_KEY_DOWN]) {
-                player->focus_target.y += FOCUS_MOVE_SPEED;
+                player->focus_target.y += FOCUS_MOVE_SPEED/FPS;
             }
         }
     }
@@ -1145,8 +1145,8 @@ void draw_title_screen(int selected_option,bool light_mode) {
     al_draw_scaled_bitmap(t_background,0,0,1024,768,0,0,WINDOW_W,WINDOW_H,0);
     ALLEGRO_COLOR color = al_map_rgb(0, 0, 0);
     if (!light_mode) color = al_map_rgb(210,210,210);
-    al_draw_text(info_font, color,0,0,0,"ver 1.0.0");
-    al_draw_text(info_font, color,0,info_font_height,0,"AUTHOR : Yu Wen-Kuang,	Ceng Qi-Ming, Liao Xiang-En");
+    al_draw_text(info_font, color,0,0,0,"ver 1.0.1");
+    al_draw_text(info_font, color,0,info_font_height,0,"AUTHOR : Yu Wen-Kuang,	Zeng Qi-Ming, Liao Xiang-En");
     al_draw_text(info_font, color,0,info_font_height*2,0,"GROUP 84 FINAL PROJECT");
     al_draw_text(title_font, color, 100, 130, 0, "FOCUS EMULATED");
 
@@ -1407,8 +1407,6 @@ int main() {
 
     #pragma endregion
 
-    #pragma endregion
-
     // ---game loop---
     #pragma region
     GameState state = TITLE_SCREEN;
@@ -1601,7 +1599,5 @@ int main() {
         level_free(&levels[i]);
     }
     #pragma endregion
-
-    return 0;
 }
 #pragma endregion
