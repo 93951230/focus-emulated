@@ -1,6 +1,6 @@
 # Intro
 
-![alt text](image.png)
+![alt text](readme_file/image.png)
 
 This is a emulated game (i.e. idea referenced) of another great game called "Focus".
 
@@ -19,17 +19,19 @@ Hold A to focus, then you can use arrow key and releasing A key will teleport yo
 
 You can only teleport if you have a circle aroud you
 
-![alt text](image-1.png)
+![alt text](readme_file/image-1.png)
 
-The circle indicates where you can teleport, and the radius represents your "focus" amount. When the circle is small, it becomes red, and then you've run out of the "focus". You can't focus if you run out of "focus".
+The circle indicates where you can teleport, and the radius represents your "focus" amount. When the circle is small, it becomes red, and then you've run out of the "focus". You can't focus if you run out of "focus". You can say:
 
-![alt text](image-2.png)
+> Radius of blue circle = amount of focus
+
+![alt text](readme_file/image-2.png)
 
 Press L to change between light mode / dark mode
 
 Press D to toggle debug mode on / off
 
-The goal of the game is to step on all target blocks.
+The goal of the game is to step on all target blocks. (The glowing lamp).
 
 # Edit Level Tutorial
 
@@ -80,7 +82,7 @@ focus 3
 
 which represents this level: 
 
-![alt text](image-3.png)
+![alt text](readme_file/image-3.png)
 
 And take 
 
@@ -105,11 +107,17 @@ focus_rate_inc 1
 
 which represents this level: 
 
-![alt text](image-4.png)
+![alt text](readme_file/image-4.png)
 
-`scale` means how large the tilemap should be placed, as compared to the case `scale = 1`
+## `scale`
 
-`tilemap` decides the shape, where
+means how large the tilemap should be placed, as compared to the case `scale = 1`
+
+when this is not specified in the txt file, it is defaulted to 1.
+
+## `tilemap`
+
+decides the shape, where
 first two input is width `W` and height `H`
 then there are `H` lines of code, each line should have `W` characters, where
 
@@ -123,7 +131,18 @@ then there are `H` lines of code, each line should have `W` characters, where
 * `a` is spike
 * `p` is position of player
 
-* `A` to `F` are sign with fixed content, reserved for in-game tutorial purpose.
+* `A` to `G` are sign with fixed content, reserved for in-game tutorial purpose.
 
+## `focus`
 
+is the maximum teleporting distance (unit is per block).
 
+That is, when focus is set to 3, then when the blue circle is largest, it will have radius = 3 block.
+
+if this isn't set, `focus` is defaulted to 0, in which case the game will not render it at all.
+
+## `focus_rate_inc` and `focus_rate_dec`
+
+describes the speed in which your focus change. The unit is per second.
+
+When you hold `A` (i.e. focus), the circle shrinks at given `focus_rate_dec` speed, and when you don't focus, the circle resumes size (until maximum given by `focus`) at a given `focus_rate_inc` speed.
