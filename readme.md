@@ -1,6 +1,10 @@
 # Intro
 
-![alt text](readme_file/image.png =50%x)
+<div style="scale:0.6;">
+
+![alt text](readme_file/image.png)
+
+</div>
 
 This is a emulated game (i.e. idea referenced) of another great game called "Focus".
 
