@@ -70,6 +70,7 @@ char tutorial_text[100];
 bool debug = false;
 bool play_audio = true;
 bool stage_clear = false;
+bool in_death = false;
 int death_cnt = 0;
 
 ALLEGRO_BITMAP* brick_wall_0;
@@ -782,6 +783,8 @@ void player_kill(Player *player, Level *lvl) {
 
     if (play_audio) al_play_sample(death_buzz,0.6,0,1.0,ALLEGRO_PLAYMODE_ONCE,NULL);
     death_cnt++;
+    in_death = true;
+    stage_clear = true;
 }
 
 void player_update(Player* player, Level* lvl, Vec2 deviation,double delta_time) {
@@ -1151,59 +1154,6 @@ void draw_info(Player* player,Level* lvl, bool light_mode,Level levels[MAX_LEVEL
     }
 }
 
-void ingame_input_handle(Player* player) {
-    if (player->focusing) {
-        if (key[ALLEGRO_KEY_LEFT] || key[ALLEGRO_KEY_RIGHT]) {
-            if (!key[ALLEGRO_KEY_LEFT] && key[ALLEGRO_KEY_RIGHT]) {
-                player->focus_target.x += FOCUS_MOVE_SPEED/FPS;
-            }
-            else if (key[ALLEGRO_KEY_LEFT] && !key[ALLEGRO_KEY_RIGHT]) {
-                player->focus_target.x -= FOCUS_MOVE_SPEED/FPS;
-            }
-        }
-        if (key[ALLEGRO_KEY_UP] || key[ALLEGRO_KEY_DOWN]) {
-            if (key[ALLEGRO_KEY_UP] && !key[ALLEGRO_KEY_DOWN]) {
-                player->focus_target.y -= FOCUS_MOVE_SPEED/FPS;
-            }
-            else if (!key[ALLEGRO_KEY_UP] && key[ALLEGRO_KEY_DOWN]) {
-                player->focus_target.y += FOCUS_MOVE_SPEED/FPS;
-            }
-        }
-    }
-    else {
-        if (key[ALLEGRO_KEY_LEFT] || key[ALLEGRO_KEY_RIGHT]) {
-            player->status = PLAYER_WALKING;
-            if (!key[ALLEGRO_KEY_LEFT] && key[ALLEGRO_KEY_RIGHT]) {
-                player->walk_dir = 1;
-            }
-            else if (key[ALLEGRO_KEY_LEFT] && !key[ALLEGRO_KEY_RIGHT]) {
-                player->walk_dir = -1;
-            }
-        }
-        else {
-            player->status = PLAYER_IDLE;
-            player->walk_dir = 0;
-        }
-    }
-
-    if (debug) { // allow for antigravity movement only 
-    if (!has_gravity) {
-        if (key[ALLEGRO_KEY_LSHIFT] || key[ALLEGRO_KEY_RSHIFT]) {
-            if (key[ALLEGRO_KEY_UP] || key[ALLEGRO_KEY_DOWN]) {
-                if (key[ALLEGRO_KEY_UP] && !key[ALLEGRO_KEY_DOWN]) {
-                    player->rect.velocity.y = -player->walk_speed;
-                }
-                else if (!key[ALLEGRO_KEY_UP] && key[ALLEGRO_KEY_DOWN]) {
-                    player->rect.velocity.y = player->walk_speed;
-                }
-            }
-            else player->rect.velocity.y = 0;
-        }
-        else player->rect.velocity.y = 0;
-    }
-    }
-}
-
 void draw_title_screen(int selected_option,bool light_mode) {
     al_draw_scaled_bitmap(t_background,0,0,1024,768,0,0,WINDOW_W,WINDOW_H,0);
     ALLEGRO_COLOR color = al_map_rgb(0, 0, 0);
@@ -1342,12 +1292,51 @@ void deinit_audio() {
 // ===animation handler===
 #pragma region
 
+double lastAnimTime = 0.0;
+bool in_transition = false;
+bool map_swapped   = false;
+const double COVER_TIME = 0.35; 
+const double HOLD_TIME = 0.10;
+const double UNCOVER_TIME = 0.35;
+bool draw_black_swipe(double lastAnimTime) {
+    double t = al_get_time() - lastAnimTime;
+
+    if (t >= COVER_TIME + HOLD_TIME + UNCOVER_TIME)
+        return false; 
+
+    double left = 0.0;
+    double right = 0.0;
+
+    if (t < COVER_TIME) {
+        double u = t / COVER_TIME; 
+        left  = 0.0;
+        right = WINDOW_W * u;
+    }
+    else if (t < COVER_TIME + HOLD_TIME) {
+        left  = 0.0;
+        right = WINDOW_W;
+    }
+    else {
+        double u = (t - COVER_TIME - HOLD_TIME) / UNCOVER_TIME; 
+        left  = WINDOW_W * u;
+        right = WINDOW_W;
+    }
+
+    al_draw_filled_rectangle(
+        left, 0,
+        right, WINDOW_H,
+        al_map_rgb(0, 0, 0)
+    );
+
+    return true;
+}
+
 #pragma endregion
-// ===main===
+
+// ===main + subroutine===
 #pragma region
-int main() {
-    // --allegro engine-- (don't touch)
-    #pragma region
+
+void allegro_engine_init() {
     char exedir[PATH_MAX];
     get_exe_dir(exedir,100);
     chdir(exedir);
@@ -1393,171 +1382,260 @@ int main() {
     al_register_event_source(queue, al_get_display_event_source(disp));
     al_register_event_source(queue, al_get_timer_event_source(timer));
 
-    ALLEGRO_EVENT event;
+    
 
     al_start_timer(timer);
 
     memset(key, 0, sizeof(key));
+}
 
-    #pragma endregion
+ALLEGRO_EVENT event;
+
+Level levels[MAX_LEVEL];
+int total_level = 0;
+Vec2 deviation;
+Player player;
+
+GameState state = TITLE_SCREEN;
+bool light_mode = false;
+bool done = false;
+bool redraw = true;
+double last_time = 0;
+double now = 0;
+double delta_time = 0;
+int selected_option = 0;
+
+void ingame_input_handle() {
+    if (player.focusing) {
+        if (key[ALLEGRO_KEY_LEFT] || key[ALLEGRO_KEY_RIGHT]) {
+            if (!key[ALLEGRO_KEY_LEFT] && key[ALLEGRO_KEY_RIGHT]) {
+                player.focus_target.x += FOCUS_MOVE_SPEED/FPS;
+            }
+            else if (key[ALLEGRO_KEY_LEFT] && !key[ALLEGRO_KEY_RIGHT]) {
+                player.focus_target.x -= FOCUS_MOVE_SPEED/FPS;
+            }
+        }
+        if (key[ALLEGRO_KEY_UP] || key[ALLEGRO_KEY_DOWN]) {
+            if (key[ALLEGRO_KEY_UP] && !key[ALLEGRO_KEY_DOWN]) {
+                player.focus_target.y -= FOCUS_MOVE_SPEED/FPS;
+            }
+            else if (!key[ALLEGRO_KEY_UP] && key[ALLEGRO_KEY_DOWN]) {
+                player.focus_target.y += FOCUS_MOVE_SPEED/FPS;
+            }
+        }
+    }
+    else {
+        if (key[ALLEGRO_KEY_LEFT] || key[ALLEGRO_KEY_RIGHT]) {
+            player.status = PLAYER_WALKING;
+            if (!key[ALLEGRO_KEY_LEFT] && key[ALLEGRO_KEY_RIGHT]) {
+                player.walk_dir = 1;
+            }
+            else if (key[ALLEGRO_KEY_LEFT] && !key[ALLEGRO_KEY_RIGHT]) {
+                player.walk_dir = -1;
+            }
+        }
+        else {
+            player.status = PLAYER_IDLE;
+            player.walk_dir = 0;
+        }
+    }
+
+    if (debug) { // allow for antigravity movement only 
+        if (!has_gravity) {
+            if (key[ALLEGRO_KEY_LSHIFT] || key[ALLEGRO_KEY_RSHIFT]) {
+                if (key[ALLEGRO_KEY_UP] || key[ALLEGRO_KEY_DOWN]) {
+                    if (key[ALLEGRO_KEY_UP] && !key[ALLEGRO_KEY_DOWN]) {
+                        player.rect.velocity.y = -player.walk_speed;
+                    }
+                    else if (!key[ALLEGRO_KEY_UP] && key[ALLEGRO_KEY_DOWN]) {
+                        player.rect.velocity.y = player.walk_speed;
+                    }
+                }
+                else player.rect.velocity.y = 0;
+            }
+            else player.rect.velocity.y = 0;
+        }
+    }
+}
+
+void event_timer_handler() {
+    switch (state) {
+        case IN_GAME:
+            if (!(in_transition && !map_swapped)) ingame_input_handle();
+            if (stage_clear) {
+                stage_clear = false;
+
+                lastAnimTime = al_get_time();
+                in_transition = true;
+                map_swapped = false;
+                
+                if (charging_playing) {
+                    al_stop_sample(&charging_id);
+                    charging_playing = false;
+                }
+            }
+            break;
+        case TITLE_SCREEN:
+
+            break;
+        default:
+            break;
+    }
+
+    if (key[ALLEGRO_KEY_ESCAPE]) done = true;
+
+    for(int i = 0; i < ALLEGRO_KEY_MAX; i++) key[i] &= ~KEY_SEEN;
+        
+    redraw = true;
+}
+
+void event_keydown_handler() {
+    if (event.keyboard.keycode < 0 || event.keyboard.keycode >= ALLEGRO_KEY_MAX) return;
+    switch (event.keyboard.keycode) {
+        case ALLEGRO_KEY_L:
+            light_mode = !light_mode;
+            break;
+        case ALLEGRO_KEY_G:
+            switch (state) {
+                case (IN_GAME):
+                    has_gravity = !has_gravity;
+                    break;
+                default:
+                    break;
+            }
+            break;
+        case ALLEGRO_KEY_UP: 
+            switch (state) {
+                case (IN_GAME): // jumping
+                    if ((player.grounded || player.coyote_timer > 0.0f) && !player.focusing) {
+                        player.rect.velocity.y = -player_jump_force;
+                    }
+                    break;
+                case (TITLE_SCREEN): // selecting
+                    selected_option = max(selected_option-1,0);
+                    if (play_audio) al_play_sample(select_ding,1.0,0,1.0,ALLEGRO_PLAYMODE_ONCE,NULL);
+                    break;
+                default:
+                    break;
+            }
+            break;
+        case ALLEGRO_KEY_DOWN:
+            switch (state) {
+                case (TITLE_SCREEN):
+                    selected_option = min(selected_option+1,option_count-1);
+                    if (play_audio) al_play_sample(select_ding,1.0,0,1.0,ALLEGRO_PLAYMODE_ONCE,NULL);
+                    break;
+                default:
+                    break;
+            }
+            break;
+        case ALLEGRO_KEY_A:
+            switch (state) {
+                case (IN_GAME): // entering player focus
+                    if (player.can_refocus) {
+                        player.focusing = true;
+                        player.status = PLAYER_IDLE;
+                        player.focus_target = player_initial_pos(&player);
+                    }
+                    break;
+                case (TITLE_SCREEN):
+                    proceed_as_selected(selected_option,&state,levels,&player,&deviation);
+                    break;
+                default:
+                    break;
+            }
+            break;
+        case ALLEGRO_KEY_TAB:
+            if (state != IN_GAME) return;
+            stage_clear = true;
+            break;
+        case ALLEGRO_KEY_D:
+            debug = !debug;
+            break;
+        case ALLEGRO_KEY_T:
+            break;
+        case ALLEGRO_KEY_M:
+            play_audio = !play_audio;
+            if (!play_audio) {
+                // al_stop_samples();
+            }
+            break;
+        default:
+            break;
+    }
+
+    key[event.keyboard.keycode] = KEY_SEEN | KEY_DOWN;
+}
+
+void event_keyup_handler() {
+    if (event.keyboard.keycode < 0 || event.keyboard.keycode >= ALLEGRO_KEY_MAX) return;
+    key[event.keyboard.keycode] &= ~KEY_DOWN;
+    if (event.keyboard.keycode == ALLEGRO_KEY_A) {
+        if (player.focusing) {
+            player_attempt_teleport(&player,&levels[curr_level]);
+
+            player.focusing = false;
+            player.can_refocus = true;
+        }
+    }
+}
+
+int main() {
+    allegro_engine_init();
 
     // --game object placement--
     #pragma region
-    Level levels[MAX_LEVEL];
-    int total_level = 0;
     sequential_level_load(levels,&total_level);
     // load levels up
-    Vec2 deviation = calculate_deviation(&levels[curr_level]);
-    Player player = player_new(&levels[curr_level]);
+    deviation = calculate_deviation(&levels[curr_level]);
+    player = player_new(&levels[curr_level]);
 
     #pragma endregion
 
     // ---game loop---
     #pragma region
-    GameState state = TITLE_SCREEN;
-    bool light_mode = true;
-    bool done = false;
-    bool redraw = true;
-    double last_time = al_get_time();
-    double now = al_get_time();
-    double delta_time = 0;
-    int selected_option = 0;
+    last_time = al_get_time();
+    now = al_get_time();
     option_count = sizeof(title_screen_options)/sizeof(title_screen_options[0]);
     while(true) {
         al_wait_for_event(queue, &event);
 
         switch(event.type) {
             case ALLEGRO_EVENT_TIMER:
-                switch (state) {
-                    case IN_GAME:
-                        ingame_input_handle(&player);
-                        if (stage_clear) {
-                            curr_level++;
-                            if (curr_level == total_level) curr_level = 0;
-                            play_level(&levels[curr_level],&state,&player,&deviation);
-                            stage_clear = false;
-                            if (charging_playing) {
-                                al_stop_sample(&charging_id);
-                                charging_playing = false;
-                            }
-                        }
-                        break;
-                    case TITLE_SCREEN:
-
-                        break;
-                    default:
-                        break;
-                }
-
-                if (key[ALLEGRO_KEY_ESCAPE]) done = true;
-
-                for(int i = 0; i < ALLEGRO_KEY_MAX; i++) key[i] &= ~KEY_SEEN;
-                    
-
-                redraw = true;
+                event_timer_handler();
                 break;
-
             case ALLEGRO_EVENT_KEY_DOWN:
-                if (event.keyboard.keycode < 0 || event.keyboard.keycode >= ALLEGRO_KEY_MAX) break;
-                switch (event.keyboard.keycode) {
-                    case ALLEGRO_KEY_L:
-                        light_mode = !light_mode;
-                        break;
-                    case ALLEGRO_KEY_G:
-                        switch (state) {
-                            case (IN_GAME):
-                                has_gravity = !has_gravity;
-                                break;
-                            default:
-                                break;
-                        }
-                        break;
-                    case ALLEGRO_KEY_UP: 
-                        switch (state) {
-                            case (IN_GAME): // jumping
-                                if ((player.grounded || player.coyote_timer > 0.0f) && !player.focusing) {
-                                    player.rect.velocity.y = -player_jump_force;
-                                }
-                                break;
-                            case (TITLE_SCREEN): // selecting
-                                selected_option = max(selected_option-1,0);
-                                if (play_audio) al_play_sample(select_ding,1.0,0,1.0,ALLEGRO_PLAYMODE_ONCE,NULL);
-                                break;
-                            default:
-                                break;
-                        }
-                        break;
-                    case ALLEGRO_KEY_DOWN:
-                        switch (state) {
-                            case (TITLE_SCREEN):
-                                selected_option = min(selected_option+1,option_count-1);
-                                if (play_audio) al_play_sample(select_ding,1.0,0,1.0,ALLEGRO_PLAYMODE_ONCE,NULL);
-                                break;
-                            default:
-                                break;
-                        }
-                        break;
-                    case ALLEGRO_KEY_A:
-                        switch (state) {
-                            case (IN_GAME): // entering player focus
-                                if (player.can_refocus) {
-                                    player.focusing = true;
-                                    player.status = PLAYER_IDLE;
-                                    player.focus_target = player_initial_pos(&player);
-                                }
-                                break;
-                            case (TITLE_SCREEN):
-                                proceed_as_selected(selected_option,&state,levels,&player,&deviation);
-                                break;
-                            default:
-                                break;
-                        }
-                        break;
-                    case ALLEGRO_KEY_TAB:
-                        if (state != IN_GAME) continue;
-                        stage_clear = true;
-                        break;
-                    case ALLEGRO_KEY_D:
-                        debug = !debug;
-                        break;
-                    case ALLEGRO_KEY_T:
-                        break;
-                    case ALLEGRO_KEY_M:
-                        play_audio = !play_audio;
-                        if (!play_audio) {
-                            // al_stop_samples();
-                        }
-                        break;
-                    default:
-                        break;
-                }
-            
-                key[event.keyboard.keycode] = KEY_SEEN | KEY_DOWN;
+                event_keydown_handler();
                 break;
             case ALLEGRO_EVENT_KEY_UP:
-                if (event.keyboard.keycode < 0 || event.keyboard.keycode >= ALLEGRO_KEY_MAX) break;
-                key[event.keyboard.keycode] &= ~KEY_DOWN;
-                if (event.keyboard.keycode == ALLEGRO_KEY_A) {
-                    if (player.focusing) {
-                        player_attempt_teleport(&player,&levels[curr_level]);
-
-                        player.focusing = false;
-                        player.can_refocus = true;
-                    }
-                }
+                event_keyup_handler();
                 break;
             case ALLEGRO_EVENT_DISPLAY_CLOSE:
                 done = true;
                 break;
-            default:
-                break;
         }
-
-        if(done) break;
+        if (done) break;
 
         now = al_get_time();
         delta_time = now - last_time;
         last_time = now;
+
+        // change level
+        if (in_transition) {
+            double t = al_get_time() - lastAnimTime;
+            if (!map_swapped && t >= COVER_TIME) {
+                if (in_death) {
+                    in_death = false;
+                }
+                else {
+                    curr_level++;
+                    if (curr_level == total_level) curr_level = 0;
+                }
+                play_level(&levels[curr_level],&state,&player,&deviation);
+                map_swapped = true;
+            }
+        }
+
         if(redraw && al_is_event_queue_empty(queue)) {  
             if (light_mode) {
                 al_clear_to_color(al_map_rgb(255, 255, 255));
@@ -1581,6 +1659,12 @@ int main() {
                     break;
                 default:
                     break;
+            }
+            
+            if (in_transition) {
+                if (!draw_black_swipe(lastAnimTime)) {
+                    in_transition = false; 
+                }
             }
 
             al_flip_display();
