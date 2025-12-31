@@ -1,6 +1,6 @@
 # Intro
 
-![alt text](readme_file/image.png)
+![alt text](readme_file/image.png =50%x)
 
 This is a emulated game (i.e. idea referenced) of another great game called "Focus".
 
@@ -146,3 +146,5 @@ if this isn't set, `focus` is defaulted to 0, in which case the game will not re
 describes the speed in which your focus change. The unit is per second.
 
 When you hold `A` (i.e. focus), the circle shrinks at given `focus_rate_dec` speed, and when you don't focus, the circle resumes size (until maximum given by `focus`) at a given `focus_rate_inc` speed.
+
+both value is defaulted to 0 if unset, and makes no effect if `foucs` is 0.

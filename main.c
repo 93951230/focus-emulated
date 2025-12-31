@@ -5,6 +5,18 @@
 #include <stdbool.h>
 #include <math.h>
 
+#if defined(_WIN32)
+    #include <windows.h>
+#elif defined(__APPLE__)
+    #include <mach-o/dyld.h>
+    #include <libgen.h>
+    #include <limits.h>
+    #include <unistd.h>
+#else
+    #include <unistd.h>
+    #include <limits.h>
+#endif
+
 #include <allegro5/allegro_font.h>
 #include <allegro5/allegro_primitives.h>
 #include <allegro5/allegro_audio.h>
@@ -98,6 +110,37 @@ char collidable_tile[] = {
 
 // ---misc---
 #pragma region
+
+static int get_exe_dir(char* out, size_t cap) {
+#if defined(_WIN32)
+    char path[MAX_PATH];
+    DWORD len = GetModuleFileNameA(NULL, path, MAX_PATH);
+    if (!len || len == MAX_PATH) return -1;
+    for (int i = (int)len - 1; i >= 0; --i)
+        if (path[i] == '\\' || path[i] == '/') { path[i] = '\0'; break; }
+    strncpy(out, path, cap);
+
+#elif defined(__APPLE__)
+    uint32_t sz = (uint32_t)cap;
+    char path[cap];
+    if (_NSGetExecutablePath(path, &sz) != 0) return -1;
+    char real[cap];
+    if (!realpath(path, real)) return -1;
+    char* dir = dirname(real);
+    strncpy(out, dir, cap);
+
+#else   // Linux
+    char path[cap];
+    ssize_t len = readlink("/proc/self/exe", path, cap - 1);
+    if (len <= 0) return -1;
+    path[len] = '\0';
+    char* dir = dirname(path);
+    strncpy(out, dir, cap);
+#endif
+    out[cap - 1] = '\0';
+    return 0;
+}
+
 void must_init(bool test, const char *description) {
     if(test) return;
 
@@ -1300,12 +1343,16 @@ void deinit_audio() {
 #pragma region
 
 #pragma endregion
-
 // ===main===
 #pragma region
 int main() {
     // --allegro engine-- (don't touch)
     #pragma region
+    char exedir[PATH_MAX];
+    get_exe_dir(exedir,100);
+    chdir(exedir);
+
+
     must_init(al_init(), "allegro");
     must_init(al_install_keyboard(), "keyboard");
 
@@ -1321,6 +1368,7 @@ int main() {
     must_init(al_init_image_addon(), "image addon");
     must_init(al_init_font_addon(), "font addon");
     must_init(al_init_ttf_addon(), "ttf addon");
+
 
     info_font = al_load_font("src/QuinqueFive.ttf", 24, 0);
     must_init(info_font, "info font");
