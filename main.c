@@ -405,9 +405,8 @@ void level_load(Level* lvl, char dire[100], bool tell_info) {
             if (lvl->map[i][j] == 'p') {
                 Vec2 pos = {j,i};
                 lvl->player_pos = pos;
-                break;
             }
-            if (lvl->map[i][j] == '7') {
+            else if (lvl->map[i][j] == '7') {
                 lvl->target_pos[lvl->target_cnt++] = vec_new(j,i);
             }
         }
@@ -893,31 +892,35 @@ void player_update(Player* player, Level* lvl, Vec2 deviation,double delta_time)
         char block = lvl->map[py][px];
         switch (block) {
             case 'A':
-                strcpy(tutorial_text, "Use [Left/Right Arrow] to move.");
+                strcpy(tutorial_text, "Use [Left/Right Arrow] to move around.");
                 show_tutorial = true;
                 break;
             case 'B':
-                strcpy(tutorial_text, "Try jumping with [Up Arrow].");
+                strcpy(tutorial_text, "Try to jump over the hill with [Up Arrow].");
                 show_tutorial = true;
                 break;
             case 'C':
-                strcpy(tutorial_text, "Step on *all the* glowing lamp to clear stage.");
+                strcpy(tutorial_text, "Target: Step on all the glowing lamp to unlit them.");
                 show_tutorial = true;
                 break;
             case 'D':
-                strcpy(tutorial_text, "Watch out for the spikes down below!!");
+                strcpy(tutorial_text, "Watch out for the spikes down below!! They kills. ");
                 show_tutorial = true;
                 break;
             case 'E':
-                strcpy(tutorial_text, "Press [A] to focus and teleport!");
+                strcpy(tutorial_text, "Press [A] to focus and teleport! :)");
                 show_tutorial = true;
                 break;
             case 'F':
-                strcpy(tutorial_text, "Use focus wisely.");
+                strcpy(tutorial_text, "Focus don't always grow back. So se focus wisely!");
                 show_tutorial = true;
                 break;
             case 'G':
                 strcpy(tutorial_text, "You are free to go. The challenge awaits.");
+                show_tutorial = true;
+                break;
+            case 'H':
+                strcpy(tutorial_text, "Bonus: Do it without pressing [A].");
                 show_tutorial = true;
                 break;
             // Add more cases as needed
@@ -1142,7 +1145,7 @@ void draw_info(Player* player,Level* lvl, bool light_mode,Level levels[MAX_LEVEL
     lines++;
     al_draw_textf(info_font, color, 10, 10+info_font_height*lines, 0, "Deaths: %i",death_cnt);
     
-    al_draw_textf(info_font, color, 10, WINDOW_H-10-info_font_height*2, 0, "Playing %s",levels[curr_level].name);
+    al_draw_textf(info_font, color, 10, WINDOW_H-10-info_font_height, 0, "Playing %s",levels[curr_level].name);
 
     // write tutorial
     if (show_tutorial) {
